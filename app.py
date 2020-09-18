@@ -14,6 +14,8 @@ from rq.job import Job
 from worker import conn
 from flask import jsonify
 
+import json
+
 
 app = Flask(__name__)
 app.config.from_object(os.environ['APP_SETTINGS'])
@@ -67,21 +69,25 @@ def count_and_save_words(url):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    results = {}
-    if request.method == "POST":
-        # this import solves a rq bug which currently exists
-        from app import count_and_save_words
+    return render_template('index.html')
 
-        # get url that the person has entered
-        url = request.form['url']
-        if not url[:8].startswith(('https://', 'http://')):
-            url = 'http://' + url
-        job = q.enqueue_call(
-            func=count_and_save_words, args=(url,), result_ttl=5000
-        )
-        print(job.get_id())
+@app.route('/start', methods=['POST'])
+def get_counts():
+    # this import solves a rq bug which currently exists
+    from app import count_and_save_words
 
-    return render_template('index.html', results=results)
+    # get url
+    data = json.loads(request.data.decode())
+    url = data["url"]
+    if not url[:8].startswith(('https://', 'http://')):
+        url = 'http://' + url
+    # start job
+    job = q.enqueue_call(
+        func=count_and_save_words, args=(url,), result_ttl=5000
+    )
+    # return created job id
+    return job.get_id()
+
 
 @app.route("/results/<job_key>", methods=['GET'])
 def get_results(job_key):
